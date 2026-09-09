@@ -1,0 +1,34 @@
+[package]
+name = "battlesnake"
+version = "1.0.0"
+edition = "2021"
+description = "Template de Battlesnake em Rust rodando em AWS Lambda - Dev. Community Mauá"
+
+# O binário gerado se chama "battlesnake" (o nome do pacote). É ele que o CD
+# renomeia para "bootstrap" antes de subir para a Lambda — se você renomear o
+# pacote, atualize também o .github/workflows/CD.yaml.
+
+[dependencies]
+# Runtime oficial da AWS para Rust. O lambda_http converte o evento do
+# API Gateway em um http::Request comum, então trabalhamos com HTTP normal.
+lambda_http = "1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+
+# Conversão entre JSON e as structs de models.rs.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Sorteio da direção em logic.rs.
+rand = "0.9"
+
+# Logs que aparecem no CloudWatch (macro info!).
+tracing = "0.1"
+
+[profile.release]
+# A sua cobra tem ~500ms por jogada, então compilamos otimizado. O LTO deixa o
+# binário ~400 KB menor, o que reduz o cold start da Lambda, e custa poucos
+# segundos a mais de build.
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true

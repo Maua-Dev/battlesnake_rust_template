@@ -1,0 +1,193 @@
+name: Tests and Deploy
+
+on:
+  push:
+    branches:
+      - '**'
+
+jobs:
+
+  ExecuteTests:
+    name: ExecuteTests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Run Tests
+        run: cargo test --locked --all-features
+
+  BootstrapBucketCreation:
+    name: Bootstrap
+    runs-on: ubuntu-latest
+    needs: ExecuteTests
+    if: github.ref_name == 'dev'
+    permissions:
+      id-token: write
+      contents: read
+
+    outputs:
+      s3_bucket_name: ${{ steps.bootstrap.outputs.s3_bucket_name }}
+      dynamo_table_name: ${{ steps.bootstrap.outputs.dynamo_table_name }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: 'us-east-1'
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID_DEV }}:role/GithubActionsRole
+          role-session-name: github-action-terraform-deploy
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.6
+          cli_config_credentials_token: ${{ secrets.TFE_API_TOKEN }}
+
+      - name: Bootstrap S3 State Bucket
+        id: bootstrap
+        shell: bash
+        working-directory: ./terraform/bootstrap
+        run: |
+          WORKSPACE_NAME="${{ github.event.repository.name }}"
+          echo "Workspace: $WORKSPACE_NAME"
+
+          # Key própria do template de Rust, para não colidir com os outros.
+          BOOTSTRAP_TERRAFORM_KEY="bootstrap-rust/terraform.tfstate"
+          echo "Key do bucket: $BOOTSTRAP_TERRAFORM_KEY"
+
+          terraform init -backend-config="key=$BOOTSTRAP_TERRAFORM_KEY"
+
+          terraform apply -auto-approve -var="project_name=$WORKSPACE_NAME"
+
+          echo "s3_bucket_name=$(terraform output -raw s3_bucket_name)" >> $GITHUB_OUTPUT
+          echo "dynamo_table_name=$(terraform output -raw dynamodb_table_name)" >> $GITHUB_OUTPUT
+
+  build_rust:
+    name: Build Rust Application
+    runs-on: ubuntu-latest
+    # Depende só dos testes, e não do Bootstrap: compilar não precisa de AWS.
+    # Assim a compilação para musl é validada em TODA branch, e não apenas no
+    # push para a dev — um erro de build aparece antes de qualquer recurso ser
+    # criado na AWS.
+    needs: ExecuteTests
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          # Alvo estático: o binário roda em qualquer Linux, inclusive no
+          # runtime provided.al2023 da Lambda, sem depender da glibc do runner.
+          targets: x86_64-unknown-linux-musl
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install musl toolchain
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - name: Build release binary
+        run: cargo build --release --locked --target x86_64-unknown-linux-musl
+
+      - name: Package as Lambda artifact
+        run: |
+          set -euo pipefail
+          mkdir -p build
+
+          # O runtime provided.al2023 procura um executável chamado "bootstrap".
+          cp target/x86_64-unknown-linux-musl/release/battlesnake build/bootstrap
+          chmod +x build/bootstrap
+
+          # Sem o bit de execução a Lambda falha só na hora de invocar, com um
+          # Runtime.InvalidEntrypoint difícil de diagnosticar. Barramos aqui.
+          file build/bootstrap
+          test -x build/bootstrap || { echo "::error::build/bootstrap não está executável"; exit 1; }
+
+          cd build && zip -j battlesnake.zip bootstrap
+
+          # O zip guarda a permissão nos atributos Unix. Conferimos que ela
+          # sobreviveu ao empacotamento, que é o que a Lambda vai ler.
+          zipinfo -l battlesnake.zip
+          zipinfo -l battlesnake.zip | grep -qE '^-rwx' || { echo "::error::o bootstrap perdeu o bit de execução dentro do zip"; exit 1; }
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: battlesnake-lambda-zip
+          path: build/battlesnake.zip
+
+  deploy_app:
+    name: 'Deploy | Deploy Application'
+    runs-on: ubuntu-latest
+    needs: [BootstrapBucketCreation, build_rust]
+
+    permissions:
+      id-token: write
+      contents: read
+
+    defaults:
+      run:
+        working-directory: ./terraform/app
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download Lambda artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: battlesnake-lambda-zip
+          path: build
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: 'us-east-1'
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID_DEV }}:role/GithubActionsRole
+          role-session-name: github-action-terraform-deploy
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.6
+          cli_config_credentials_token: ${{ secrets.TFE_API_TOKEN }}
+
+      - name: Terraform Init with Dynamic Backend
+        run: |
+          WORKSPACE_NAME="${{ github.event.repository.name }}"
+          APP_TERRAFORM_KEY="app/${WORKSPACE_NAME}/terraform.tfstate"
+          echo "Key do bucket: $APP_TERRAFORM_KEY"
+
+          terraform init \
+            -backend-config="bucket=${{ needs.BootstrapBucketCreation.outputs.s3_bucket_name }}" \
+            -backend-config="dynamodb_table=${{ needs.BootstrapBucketCreation.outputs.dynamo_table_name }}" \
+            -backend-config="key=$APP_TERRAFORM_KEY"
+
+      - name: Terraform Apply
+        run: |
+          terraform apply -auto-approve \
+            -var="project_name=${{ github.event.repository.name }}" \
+            -var="environment=dev"
+
+      - name: Mostrar a URL da cobra
+        run: |
+          echo "### 🐍 A sua cobra está no ar!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Cadastre esta URL no site do Battlesnake:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "    $(terraform output -raw api_url_base)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "[Ver os logs no CloudWatch]($(terraform output -raw cloudwatch_logs))" >> $GITHUB_STEP_SUMMARY

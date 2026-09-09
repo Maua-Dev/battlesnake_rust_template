@@ -1,0 +1,19 @@
+# Rust
+/target
+**/*.rs.bk
+
+# Terraform
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+crash.log
+*.tfvars
+override.tf
+override.tf.json
+.terraformrc
+terraform.rc
+
+# Sistema
+.DS_Store
+.idea/
+.vscode/

@@ -1,0 +1,3 @@
+# Mantém tudo com fim de linha LF no repositório. O CD roda em Linux e um \r
+# perdido quebraria os blocos de shell do workflow.
+* text=auto eol=lf
