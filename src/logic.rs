@@ -60,20 +60,22 @@ pub fn get_move(state: &GameState) -> Value {
     // O pescoço é a parte do corpo logo atrás da cabeça. Voltar por cima dele
     // é morte certa, então marcamos aquela direção como insegura.
     let my_head = &state.you.body[0];
-    let my_neck = &state.you.body[1];
 
-    if my_neck.x < my_head.x {
-        // pescoço à esquerda da cabeça -> não vá para a esquerda
-        is_move_safe.insert("left", false);
-    } else if my_neck.x > my_head.x {
-        // pescoço à direita da cabeça -> não vá para a direita
-        is_move_safe.insert("right", false);
-    } else if my_neck.y < my_head.y {
-        // pescoço abaixo da cabeça -> não desça
-        is_move_safe.insert("down", false);
-    } else if my_neck.y > my_head.y {
-        // pescoço acima da cabeça -> não suba
-        is_move_safe.insert("up", false);
+    // Acesso seguro ao pescoço — a cobra pode ter apenas 1 segmento no início.
+    if let Some(my_neck) = state.you.body.get(1) {
+        if my_neck.x < my_head.x {
+            // pescoço à esquerda da cabeça -> não vá para a esquerda
+            is_move_safe.insert("left", false);
+        } else if my_neck.x > my_head.x {
+            // pescoço à direita da cabeça -> não vá para a direita
+            is_move_safe.insert("right", false);
+        } else if my_neck.y < my_head.y {
+            // pescoço abaixo da cabeça -> não desça
+            is_move_safe.insert("down", false);
+        } else if my_neck.y > my_head.y {
+            // pescoço acima da cabeça -> não suba
+            is_move_safe.insert("up", false);
+        }
     }
 
     // TODO: Passo 1 — impedir que a cobra saia do tabuleiro
@@ -94,8 +96,14 @@ pub fn get_move(state: &GameState) -> Value {
         .collect();
 
     if safe_moves.is_empty() {
-        info!("MOVE {}: sem saída! descendo", state.turn);
-        return json!({ "move": "down" });
+        // Emergência: todas as direções são perigosas.
+        // Escolhemos uma ao acaso entre as 4 — melhor do que uma direção fixa.
+        let all_moves = ["up", "down", "left", "right"];
+        let fallback = all_moves
+            .choose(&mut rand::rng())
+            .expect("array não está vazio");
+        info!("MOVE {}: sem saída! emergência -> {}", state.turn, fallback);
+        return json!({ "move": fallback });
     }
 
     // Escolhe uma direção segura ao acaso.
@@ -201,5 +209,56 @@ mod tests {
         for _ in 0..50 {
             assert_ne!(chosen_move(&state), "up");
         }
+    }
+
+    #[test]
+    fn evita_parede_quando_tem_opcao() {
+        // Cobra no canto inferior esquerdo, pescoço à direita da cabeça:
+        // não pode ir para right (pescoço) nem left (x=-1) nem down (y=-1).
+        // A única opção segura é "up".
+        let state = game_state(Coord { x: 0, y: 0 }, Coord { x: 1, y: 0 });
+        for _ in 0..50 {
+            let direction = chosen_move(&state);
+            assert!(
+                ["up", "down", "left", "right"].contains(&direction.as_str()),
+                "direção inválida: {direction}"
+            );
+            assert_ne!(direction, "left",  "foi para fora do tabuleiro (esquerda)");
+            assert_ne!(direction, "down",  "foi para fora do tabuleiro (baixo)");
+        }
+    }
+
+    #[test]
+    fn evita_proprio_corpo_quando_tem_opcao() {
+        // Cabeça em (5,4), pescoço à esquerda (4,4).
+        // Neste estado padrão a cobra pode ir para up, down ou right.
+        // Verificamos que nunca escolhe "left" (que bateria no pescoço).
+        let state = game_state(Coord { x: 5, y: 4 }, Coord { x: 4, y: 4 });
+        for _ in 0..50 {
+            assert_ne!(chosen_move(&state), "left", "voltou pelo pescoço/corpo");
+        }
+    }
+
+    #[test]
+    fn comportamento_definido_sem_safe_moves() {
+        // Cabeça no canto (0,0), pescoço acima (0,1) — bloqueia up.
+        // left (x=-1) e down (y=-1) saem do tabuleiro.
+        // Somente right estaria livre, mas o helper adiciona um segmento
+        // em (1,0) para fechar todas as saídas e testar o fallback.
+        //
+        // Independentemente de qual direção for escolhida, não pode lançar
+        // pânico e deve ser uma das quatro direções válidas.
+        let head = Coord { x: 0, y: 0 };
+        let neck = Coord { x: 0, y: 1 };
+        let mut state = game_state(head, neck);
+        // Adiciona um segmento do corpo à direita para bloquear "right"
+        state.you.body.push(Coord { x: 1, y: 0 });
+        state.board.snakes = vec![state.you.clone()];
+
+        let direction = chosen_move(&state);
+        assert!(
+            ["up", "down", "left", "right"].contains(&direction.as_str()),
+            "fallback retornou direção inválida: {direction}"
+        );
     }
 }

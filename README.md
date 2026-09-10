@@ -72,6 +72,22 @@ estado do jogo até as suas quatro funções.
 
 ---
 
+## ⭐ Onde implementar sua snake
+
+**Você só precisa editar `src/logic.rs`.** Os outros arquivos existem para
+levar o estado do jogo até as suas quatro funções.
+
+### O que você deve alterar:
+- `src/logic.rs` — **este é o seu arquivo principal**
+
+### O que você normalmente NÃO precisa alterar:
+- `src/main.rs` — ponte com a Lambda
+- `src/models.rs` — structs do estado do jogo
+- Infraestrutura (Terraform)
+- GitHub Actions
+
+---
+
 ## 🧠 As quatro funções
 
 Todas ficam em `src/logic.rs` e recebem um `&GameState` (definido em `models.rs`):
@@ -172,13 +188,19 @@ passo *Terraform Apply*.
 
 ---
 
-## 🎯 Cadastrando no Battlesnake
+## 🎯 Cadastrando na Arena Mauá
 
+1. Acesse [arena.devmaua.com](https://arena.devmaua.com)
+2. Faça login com sua conta Mauá
+3. No campo **URL**, cole a URL gerada pelo deploy
+   (algo como `https://abc123.execute-api.us-east-1.amazonaws.com/dev`)
+4. Salve e participe das partidas e do ranking!
+
+Se quiser testar primeiro no site oficial:
 1. Entre em [play.battlesnake.com](https://play.battlesnake.com)
 2. **My Battlesnakes** → **Create Battlesnake**
 3. No campo **URL**, cole a URL do deploy
-   (algo como `https://abc123.execute-api.us-east-1.amazonaws.com/dev`)
-4. Salve e mande ver nos jogos e desafios!
+4. Salve e mande ver!
 
 Se o site reclamar da URL, teste antes no terminal:
 
@@ -187,6 +209,21 @@ curl https://SUA_URL_AQUI/
 ```
 
 Deve responder o JSON do `info()`.
+
+---
+
+## 📈 Progressão pedagógica
+
+| Nível | Nome | O que implementar |
+|---|---|---|
+| 0 | **Random** | movimento aleatório (já vem pronto) |
+| 1 | **Don't Die** | não voltar, não bater na parede, não bater em si mesmo |
+| 2 | **Food** | procurar comida |
+| 3 | **Space** | avaliar espaço disponível, evitar becos |
+| 4 | **Opponents** | considerar outras cobras, head-to-head |
+| 5 | **Advanced** | BFS, flood fill, A*, avaliação de território |
+
+Comece do Nível 1 implementando os `TODO`s em `src/logic.rs`.
 
 ---
 
