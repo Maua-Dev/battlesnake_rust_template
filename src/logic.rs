@@ -78,12 +78,39 @@ pub fn get_move(state: &GameState) -> Value {
         }
     }
 
-    // TODO: Passo 1 — impedir que a cobra saia do tabuleiro
-    // let board_width = state.board.width;
-    // let board_height = state.board.height;
+    // 2. Impedir que a cobra saia do tabuleiro (paredes)
+    let board_width = state.board.width;
+    let board_height = state.board.height;
 
-    // TODO: Passo 2 — impedir que a cobra bata no próprio corpo
-    // let my_body = &state.you.body;
+    if my_head.x + 1 >= board_width {
+        is_move_safe.insert("right", false);
+    }
+    if my_head.x - 1 < 0 {
+        is_move_safe.insert("left", false);
+    }
+    if my_head.y + 1 >= board_height {
+        is_move_safe.insert("up", false);
+    }
+    if my_head.y - 1 < 0 {
+        is_move_safe.insert("down", false);
+    }
+
+    // 3. Impedir que a cobra bata no próprio corpo
+    let my_body = &state.you.body;
+    for segment in my_body {
+        if segment.x == my_head.x + 1 && segment.y == my_head.y {
+            is_move_safe.insert("right", false);
+        }
+        if segment.x == my_head.x - 1 && segment.y == my_head.y {
+            is_move_safe.insert("left", false);
+        }
+        if segment.x == my_head.x && segment.y == my_head.y + 1 {
+            is_move_safe.insert("up", false);
+        }
+        if segment.x == my_head.x && segment.y == my_head.y - 1 {
+            is_move_safe.insert("down", false);
+        }
+    }
 
     // TODO: Passo 3 — impedir que a cobra bata nas adversárias
     // let opponents = &state.board.snakes;
@@ -230,12 +257,19 @@ mod tests {
 
     #[test]
     fn evita_proprio_corpo_quando_tem_opcao() {
-        // Cabeça em (5,4), pescoço à esquerda (4,4).
-        // Neste estado padrão a cobra pode ir para up, down ou right.
-        // Verificamos que nunca escolhe "left" (que bateria no pescoço).
-        let state = game_state(Coord { x: 5, y: 4 }, Coord { x: 4, y: 4 });
+        // Cabeça em (5,4), pescoço à esquerda (4,4), corpo acima em (5,5).
+        // Restam right e down. Verificamos que nunca escolhe "left" nem "up".
+        let head = Coord { x: 5, y: 4 };
+        let neck = Coord { x: 4, y: 4 };
+        let mut state = game_state(head, neck);
+        state.you.body = vec![head, neck, Coord { x: 5, y: 5 }, Coord { x: 4, y: 3 }];
+        state.board.snakes = vec![state.you.clone()];
+
         for _ in 0..50 {
-            assert_ne!(chosen_move(&state), "left", "voltou pelo pescoço/corpo");
+            let direction = chosen_move(&state);
+            assert_ne!(direction, "left", "voltou pelo pescoço");
+            assert_ne!(direction, "up", "bateu no próprio corpo");
+            assert!(["right", "down"].contains(&direction.as_str()));
         }
     }
 
