@@ -29,7 +29,7 @@ provider "aws" {
 data "aws_caller_identity" "current" {}
 
 locals {
-  function_name = "battlesnake-${var.project_name}-lambda-${var.environment}"
+  function_name = "battlesnake-${replace(var.project_name, "_", "-")}-lambda-${var.environment}"
 
   # Zip com o binário "bootstrap", montado pelo CD
   # (veja .github/workflows/CD.yaml, job "build_rust").
@@ -52,7 +52,7 @@ data "aws_iam_policy_document" "assume_role" {
 }
 
 resource "aws_iam_role" "lambda_role" {
-  name                 = "battlesnake-${var.project_name}-role-${var.environment}"
+  name                 = "battlesnake-${replace(var.project_name, "_", "-")}-role-${var.environment}"
   permissions_boundary = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:policy/pb-battlesnake-participant"
   assume_role_policy   = data.aws_iam_policy_document.assume_role.json
 }
@@ -99,7 +99,7 @@ resource "aws_lambda_function" "battlesnake" {
 # ----------------------------- API Gateway ---------------------------------
 
 resource "aws_api_gateway_rest_api" "api" {
-  name        = "battlesnake-${var.project_name}-api-${var.environment}"
+  name        = "battlesnake-${replace(var.project_name, "_", "-")}-api-${var.environment}"
   description = "API da cobra ${var.project_name} (Rust)"
 }
 
