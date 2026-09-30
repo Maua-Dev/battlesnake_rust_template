@@ -26,8 +26,10 @@ provider "aws" {
   region = "us-east-1"
 }
 
+data "aws_caller_identity" "current" {}
+
 locals {
-  function_name = "${var.project_name}-lambda-${var.environment}"
+  function_name = "battlesnake-${var.project_name}-lambda-${var.environment}"
 
   # Zip com o binário "bootstrap", montado pelo CD
   # (veja .github/workflows/CD.yaml, job "build_rust").
@@ -50,8 +52,9 @@ data "aws_iam_policy_document" "assume_role" {
 }
 
 resource "aws_iam_role" "lambda_role" {
-  name               = "lambda_role_battlesnake-${var.project_name}_${var.environment}"
-  assume_role_policy = data.aws_iam_policy_document.assume_role.json
+  name                 = "battlesnake-${var.project_name}-role-${var.environment}"
+  permissions_boundary = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:policy/pb-battlesnake-participant"
+  assume_role_policy   = data.aws_iam_policy_document.assume_role.json
 }
 
 # Permite que a função escreva logs no CloudWatch.
@@ -96,7 +99,7 @@ resource "aws_lambda_function" "battlesnake" {
 # ----------------------------- API Gateway ---------------------------------
 
 resource "aws_api_gateway_rest_api" "api" {
-  name        = "api-battlesnake-${var.project_name}-${var.environment}"
+  name        = "battlesnake-${var.project_name}-api-${var.environment}"
   description = "API da cobra ${var.project_name} (Rust)"
 }
 
