@@ -182,8 +182,3 @@ output "api_url_base" {
   description = "URL da sua cobra. É esta que você cadastra no site do Battlesnake."
   value       = aws_api_gateway_stage.stage.invoke_url
 }
-
-output "cloudwatch_logs" {
-  description = "Link direto para os logs da sua cobra."
-  value       = "https://us-east-1.console.aws.amazon.com/cloudwatch/home?region=us-east-1#logsV2:log-groups/log-group/$252Faws$252Flambda$252F${local.function_name}"
-}

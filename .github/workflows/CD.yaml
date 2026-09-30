@@ -163,5 +163,3 @@ jobs:
           echo "Cadastre esta URL no site do Battlesnake:" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "    $(terraform output -raw api_url_base)" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "[Ver os logs no CloudWatch]($(terraform output -raw cloudwatch_logs))" >> $GITHUB_STEP_SUMMARY
