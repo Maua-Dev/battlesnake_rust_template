@@ -152,13 +152,6 @@ jobs:
 
       - name: Terraform Apply
         run: |
-          REPO_NAME="${{ github.event.repository.name }}"
-          REPO_SLUG="${REPO_NAME//_/-}"
-          LOG_GROUP="/aws/lambda/battlesnake-${REPO_SLUG}-lambda-dev"
-          # Partial apply can leave the log group in AWS without TF state
-          if ! terraform state list 2>/dev/null | grep -q 'aws_cloudwatch_log_group.lambda'; then
-            aws logs delete-log-group --log-group-name "$LOG_GROUP" 2>/dev/null || true
-          fi
           terraform apply -auto-approve \
             -var="project_name=${{ github.event.repository.name }}" \
             -var="environment=dev"

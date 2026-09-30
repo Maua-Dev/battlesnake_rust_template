@@ -63,13 +63,6 @@ resource "aws_iam_role_policy_attachment" "lambda_exec_policy" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
-# Criado antes da função para podermos limitar a retenção dos logs. Sem isso a
-# AWS cria o grupo sozinha e guarda os logs para sempre.
-resource "aws_cloudwatch_log_group" "lambda" {
-  name              = "/aws/lambda/${local.function_name}"
-  retention_in_days = 14
-}
-
 resource "aws_lambda_function" "battlesnake" {
   function_name = local.function_name
 
@@ -92,8 +85,6 @@ resource "aws_lambda_function" "battlesnake" {
       RUST_LOG = "info"
     }
   }
-
-  depends_on = [aws_cloudwatch_log_group.lambda]
 }
 
 # ----------------------------- API Gateway ---------------------------------
@@ -194,5 +185,5 @@ output "api_url_base" {
 
 output "cloudwatch_logs" {
   description = "Link direto para os logs da sua cobra."
-  value       = "https://us-east-1.console.aws.amazon.com/cloudwatch/home?region=us-east-1#logsV2:log-groups/log-group/${replace(aws_cloudwatch_log_group.lambda.name, "/", "$252F")}"
+  value       = "https://us-east-1.console.aws.amazon.com/cloudwatch/home?region=us-east-1#logsV2:log-groups/log-group/$252Faws$252Flambda$252F${local.function_name}"
 }
